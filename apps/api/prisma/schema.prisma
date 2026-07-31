@@ -1,0 +1,39 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Task {
+  id           String        @id @default(uuid())
+  workspaceId  String
+  title        String
+  description  String?
+  status       String        @default("TODO")
+  priority     String        @default("MEDIUM")
+  dueDate      DateTime?
+  tags         String        @default("[]") // JSON serialized string array
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  activityLogs ActivityLog[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  taskId      String
+  workspaceId String
+  action      String
+  actorId     String   @default("system")
+  timestamp   DateTime @default(now())
+  details     String?  // Serialized JSON
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([taskId])
+}
