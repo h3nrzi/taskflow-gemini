@@ -1,5 +1,7 @@
 # Sprint Backlog — TaskFlow Core Platform
 
+## Sprint 1 (Completed)
+
 | Story ID | Title | Role | Complexity Points | Status | Assigned Agent |
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `STORY-001` | Task Schemas & Backend API | Backend Developer | 5 | `DONE` | `backend_developer` |
@@ -8,40 +10,55 @@
 
 ---
 
-## Story Details & Verification Results
+## Sprint 2 (Active Planning)
 
-### `STORY-001`: Task Schemas & Backend API
-- **User Story**: As a Backend Developer, I want type-safe Task schemas and Fastify REST API endpoints, so that the web client can securely create, query, update, and track tasks.
+| Story ID | Title | Role | Complexity Points | Status | Assigned Agent |
+| :--- | :--- | :--- | :---: | :--- | :--- |
+| `STORY-004` | Task Search, Priority & Tag Filtering | Fullstack | 3 | `READY_FOR_DEV` | `frontend_developer` / `backend_developer` |
+| `STORY-005` | Task Edit, Delete & Detail Modal | Fullstack | 3 | `READY_FOR_DEV` | `frontend_developer` / `backend_developer` |
+| `STORY-006` | Activity Log API & Audit Trail Drawer | Fullstack | 5 | `READY_FOR_DEV` | `backend_developer` / `frontend_developer` |
+| `STORY-007` | QA Integration & E2E Verification (Sprint 2) | QA Reviewer | 3 | `PENDING_IMPL` | `qa_reviewer` |
+
+---
+
+## Sprint 2 Story Specifications
+
+### `STORY-004`: Task Search, Priority & Tag Filtering
+- **User Story**: As a Team Member, I want to search tasks by keyword and filter by priority or tags, so that I can quickly locate relevant work items on busy boards.
+- **Complexity Score**: 3 Points
+- **Status**: `READY_FOR_DEV`
+- **Acceptance Criteria**:
+  1. **AC-004.1 (Backend Filter Schema & Endpoint)**: `GET /api/tasks` accepts query parameters: `search` (keyword in title/description), `priority` (`LOW`|`MEDIUM`|`HIGH`|`URGENT`), and `tag` (string label).
+  2. **AC-004.2 (Filter Validation)**: Invalid query filter params return `422 Unprocessable Entity`.
+  3. **AC-004.3 (UI Search Bar & Filter Controls)**: Top bar includes Search Input, Priority Dropdown, and Tag selector with dynamic board filtering.
+
+---
+
+### `STORY-005`: Task Edit, Delete & Detail Modal
+- **User Story**: As a Team Member, I want to edit task details or delete completed tasks, so that task information remains accurate and up to date.
+- **Complexity Score**: 3 Points
+- **Status**: `READY_FOR_DEV`
+- **Acceptance Criteria**:
+  1. **AC-005.1 (Update Endpoint)**: `PUT /api/tasks/:id` updates title, description, priority, dueDate, and tags with `UpdateTaskInputSchema` Zod validation, returning `200 OK`.
+  2. **AC-005.2 (Delete Endpoint)**: `DELETE /api/tasks/:id` removes the task and associated activity logs, returning `200 OK` or `204 No Content`.
+  3. **AC-005.3 (Detail & Edit Modal UI)**: Clicking a task card opens a Full Detail Modal with inline editing, deletion confirmation, and status management.
+
+---
+
+### `STORY-006`: Activity Log API & Audit Trail Drawer
+- **User Story**: As an Auditor / Manager, I want to view a full activity audit log for any task or workspace, so that I can trace all status updates and task modifications.
 - **Complexity Score**: 5 Points
-- **Status**: `DONE`
-- **Acceptance Criteria Verification**:
-  1. **AC-001.1 (Contract-First Schemas)**: `shared/schemas/task.schema.ts` exports Zod schemas (`TaskSchema`, `CreateTaskInputSchema`, `UpdateTaskStatusInputSchema`, `TaskStatusEnum`) and derived TypeScript types. [PASSED]
-  2. **AC-001.2 (Create Task Endpoint)**: `POST /api/tasks` creates a task in SQLite database via Prisma, returning `201 Created` with the created task payload. [PASSED]
-  3. **AC-001.3 (List Tasks Endpoint)**: `GET /api/tasks` returns `200 OK` with an array of tasks filtered by `workspaceId` and optional `status`. [PASSED]
-  4. **AC-001.4 (Update Status Endpoint)**: `PATCH /api/tasks/:id/status` updates the task status (`TODO` -> `IN_PROGRESS` -> `DONE`), returning `200 OK` with updated task payload. [PASSED]
-  5. **AC-001.5 (Payload Fail-Fast)**: Invalid input payloads (e.g. missing title, invalid status string) are rejected immediately with `422 Unprocessable Entity`. [PASSED]
-  6. **AC-001.6 (Activity Log Audit)**: Task status mutations create an audit record in the Activity Log table. [PASSED]
+- **Status**: `READY_FOR_DEV`
+- **Acceptance Criteria**:
+  1. **AC-006.1 (Activity Log List Endpoint)**: `GET /api/activity-logs` returns paginated audit records for a `workspaceId` or specific `taskId`, returning `200 OK`.
+  2. **AC-006.2 (Audit Trail UI Drawer)**: Sliding side drawer UI displaying chronological activity events (Task Created, Status Changed, Priority Updated) with actor timestamps.
 
 ---
 
-### `STORY-002`: Frontend Kanban Board UI
-- **User Story**: As a Team Member, I want an interactive Kanban board interface, so that I can visually manage and drag tasks between Todo, In Progress, and Done columns.
+### `STORY-007`: QA Integration & E2E Verification (Sprint 2)
+- **User Story**: As a QA Reviewer, I want to execute integration tests for search, edit/delete, and activity log APIs, so that Sprint 2 features pass Definition of Done with zero regression.
 - **Complexity Score**: 3 Points
-- **Status**: `DONE`
-- **Acceptance Criteria Verification**:
-  1. **AC-002.1 (Kanban Layout)**: Layout presents 3 distinct columns (`TODO`, `IN_PROGRESS`, `DONE`) styled using Tailwind CSS and shadcn/ui. [PASSED]
-  2. **AC-002.2 (Task Cards)**: Each task card displays Title, Priority badge, Due Date, and Tags. [PASSED]
-  3. **AC-002.3 (Interactive State Transition)**: Changing a task column triggers a `PATCH /api/tasks/:id/status` request and updates state cleanly. [PASSED]
-  4. **AC-002.4 (Type Safety)**: 100% of API query/mutation payloads consume shared Zod schemas from `@taskflow/shared`. [PASSED]
-  5. **AC-002.5 (Error Feedback)**: Failed API responses (4xx/5xx) render accessible Toast notifications and Alert UI states. [PASSED]
-
----
-
-### `STORY-003`: QA Integration & E2E Verification
-- **User Story**: As a QA Reviewer, I want automated integration and E2E test coverage, so that task lifecycle state changes and API validation rules remain regression-free.
-- **Complexity Score**: 3 Points
-- **Status**: `DONE`
-- **Acceptance Criteria Verification**:
-  1. **AC-003.1 (AC Verification)**: All acceptance criteria in `STORY-001` and `STORY-002` verified with automated test executions. [PASSED]
-  2. **AC-003.2 (Zero Regression)**: Unit, integration, and typecheck commands run without failure. [PASSED]
-  3. **AC-003.3 (Definition of Done)**: Code formatting, schema validation, and error state criteria satisfied. [PASSED]
+- **Status**: `PENDING_IMPL`
+- **Acceptance Criteria**:
+  1. **AC-007.1 (Sprint 2 Integration Suite)**: Vitest suite verifying search filtering, update payload validation, delete actions, and audit log retrieval.
+  2. **AC-007.2 (Zero Regression)**: 100% test pass rate and 0 typecheck compilation errors across `apps/api` and `apps/web`.
