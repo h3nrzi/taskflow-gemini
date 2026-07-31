@@ -10,6 +10,7 @@ interface KanbanColumnProps {
   title: string;
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
+  onSelectTask?: (task: Task) => void;
 }
 
 const columnHeaderConfig: Record<
@@ -38,6 +39,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   title,
   tasks,
   onUpdateStatus,
+  onSelectTask,
 }) => {
   const config = columnHeaderConfig[status];
 
@@ -64,7 +66,12 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
           </div>
         ) : (
           tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onUpdateStatus={onUpdateStatus} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              onUpdateStatus={onUpdateStatus}
+              onSelectTask={onSelectTask}
+            />
           ))
         )}
       </div>

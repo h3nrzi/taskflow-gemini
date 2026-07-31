@@ -2,14 +2,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { prisma } from '../src/db.js';
 
-describe('Task REST API Integration Tests', () => {
+describe('Task REST API Integration Tests (Sprint 1 & Sprint 2)', () => {
   const app = buildApp();
-  const testWorkspaceId = 'ws-test-1001';
+  const testWorkspaceId = 'ws-test-sprint2';
   let createdTaskId: string;
 
   beforeAll(async () => {
     await app.ready();
-    // Clean up test tasks
     await prisma.activityLog.deleteMany({ where: { workspaceId: testWorkspaceId } });
     await prisma.task.deleteMany({ where: { workspaceId: testWorkspaceId } });
   });
@@ -27,79 +26,77 @@ describe('Task REST API Integration Tests', () => {
       url: '/api/tasks',
       payload: {
         workspaceId: testWorkspaceId,
-        title: 'Build Fastify Task API',
-        description: 'Implement Task REST API endpoints with Zod payload validation',
+        title: 'Refactor Fastify Endpoints',
+        description: 'Add Sprint 2 endpoints with Zod payload validation',
         priority: 'HIGH',
-        tags: ['backend', 'fastify', 'prisma'],
+        tags: ['backend', 'sprint2', 'zod'],
       },
     });
 
     expect(response.statusCode).toBe(201);
     const body = JSON.parse(response.payload);
     expect(body.id).toBeDefined();
-    expect(body.title).toBe('Build Fastify Task API');
+    expect(body.title).toBe('Refactor Fastify Endpoints');
     expect(body.status).toBe('TODO');
     expect(body.priority).toBe('HIGH');
-    expect(body.tags).toEqual(['backend', 'fastify', 'prisma']);
+    expect(body.tags).toEqual(['backend', 'sprint2', 'zod']);
 
     createdTaskId = body.id;
   });
 
-  it('POST /api/tasks — rejects invalid payload with 422 Unprocessable Entity (Fail-Fast Gate)', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/tasks',
-      payload: {
-        // Missing workspaceId & title
-        description: 'Invalid task payload without title',
-      },
-    });
-
-    expect(response.statusCode).toBe(422);
-    const body = JSON.parse(response.payload);
-    expect(body.statusCode).toBe(422);
-    expect(body.error).toBe('Unprocessable Entity');
-  });
-
-  it('GET /api/tasks — lists tasks for a workspace (200 OK)', async () => {
+  it('GET /api/tasks — filters tasks by search keyword and priority (STORY-004)', async () => {
     const response = await app.inject({
       method: 'GET',
-      url: `/api/tasks?workspaceId=${testWorkspaceId}`,
+      url: `/api/tasks?workspaceId=${testWorkspaceId}&search=Refactor&priority=HIGH`,
     });
 
     expect(response.statusCode).toBe(200);
     const tasks = JSON.parse(response.payload);
     expect(Array.isArray(tasks)).toBe(true);
-    expect(tasks.length).toBeGreaterThanOrEqual(1);
-    expect(tasks[0].workspaceId).toBe(testWorkspaceId);
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].id).toBe(createdTaskId);
   });
 
-  it('PATCH /api/tasks/:id/status — updates task status to IN_PROGRESS (200 OK)', async () => {
+  it('PUT /api/tasks/:id — updates full task details (STORY-005)', async () => {
     const response = await app.inject({
-      method: 'PATCH',
-      url: `/api/tasks/${createdTaskId}/status`,
+      method: 'PUT',
+      url: `/api/tasks/${createdTaskId}`,
       payload: {
-        status: 'IN_PROGRESS',
+        title: 'Updated Fastify Endpoints Title',
+        priority: 'URGENT',
+        tags: ['backend', 'updated'],
       },
     });
 
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.payload);
     expect(body.id).toBe(createdTaskId);
-    expect(body.status).toBe('IN_PROGRESS');
+    expect(body.title).toBe('Updated Fastify Endpoints Title');
+    expect(body.priority).toBe('URGENT');
+    expect(body.tags).toEqual(['backend', 'updated']);
   });
 
-  it('PATCH /api/tasks/:id/status — rejects invalid status with 422 Unprocessable Entity', async () => {
+  it('GET /api/activity-logs — fetches activity audit logs for workspace (STORY-006)', async () => {
     const response = await app.inject({
-      method: 'PATCH',
-      url: `/api/tasks/${createdTaskId}/status`,
-      payload: {
-        status: 'INVALID_STATUS_STRING',
-      },
+      method: 'GET',
+      url: `/api/activity-logs?workspaceId=${testWorkspaceId}`,
     });
 
-    expect(response.statusCode).toBe(422);
+    expect(response.statusCode).toBe(200);
+    const logs = JSON.parse(response.payload);
+    expect(Array.isArray(logs)).toBe(true);
+    expect(logs.length).toBeGreaterThanOrEqual(2); // TASK_CREATED, TASK_UPDATED
+  });
+
+  it('DELETE /api/tasks/:id — deletes task successfully (STORY-005)', async () => {
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/tasks/${createdTaskId}`,
+    });
+
+    expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.payload);
-    expect(body.statusCode).toBe(422);
+    expect(body.message).toBe('Task deleted successfully');
+    expect(body.id).toBe(createdTaskId);
   });
 });

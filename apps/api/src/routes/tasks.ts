@@ -5,17 +5,21 @@ import { prisma } from '../db.js';
 import {
   CreateTaskInputSchema,
   UpdateTaskStatusInputSchema,
-  TaskStatusEnum,
+  UpdateTaskInputSchema,
+  TaskQueryFilterSchema,
+  ActivityLogQuerySchema,
   CreateTaskInput,
   UpdateTaskStatusInput,
-  TaskStatus,
+  UpdateTaskInput,
+  TaskQueryFilter,
+  ActivityLogQuery,
 } from '../../../../shared/schemas/task.schema.js';
 
 export async function taskRoutes(app: FastifyInstance) {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
 
   /**
-   * POST /api/tasks — Create Task
+   * POST /api/tasks — Create Task (Sprint 1)
    */
   typedApp.post(
     '/tasks',
@@ -62,25 +66,41 @@ export async function taskRoutes(app: FastifyInstance) {
   );
 
   /**
-   * GET /api/tasks — Query Tasks by Workspace ID and optional Status
+   * GET /api/tasks — Search & Filter Tasks (Sprint 2 - STORY-004)
    */
   typedApp.get(
     '/tasks',
     {
       schema: {
-        querystring: z.object({
-          workspaceId: z.string().min(1, 'workspaceId is required'),
-          status: TaskStatusEnum.optional(),
-        }),
+        querystring: TaskQueryFilterSchema,
       },
     },
     async (request, reply) => {
-      const query = request.query as { workspaceId: string; status?: TaskStatus };
-      const { workspaceId, status } = query;
+      const query = request.query as TaskQueryFilter;
+      const { workspaceId, status, priority, tag, search } = query;
 
       const whereCondition: any = { workspaceId };
+
       if (status) {
         whereCondition.status = status;
+      }
+
+      if (priority) {
+        whereCondition.priority = priority;
+      }
+
+      if (tag) {
+        whereCondition.tags = {
+          contains: tag,
+        };
+      }
+
+      if (search && search.trim()) {
+        const searchTerm = search.trim();
+        whereCondition.OR = [
+          { title: { contains: searchTerm } },
+          { description: { contains: searchTerm } },
+        ];
       }
 
       const tasks = await prisma.task.findMany({
@@ -101,15 +121,13 @@ export async function taskRoutes(app: FastifyInstance) {
   );
 
   /**
-   * PATCH /api/tasks/:id/status — Update Task Status
+   * PATCH /api/tasks/:id/status — Update Task Status (Sprint 1)
    */
   typedApp.patch(
     '/tasks/:id/status',
     {
       schema: {
-        params: z.object({
-          id: z.string().uuid(),
-        }),
+        params: z.object({ id: z.string().uuid() }),
         body: UpdateTaskStatusInputSchema,
       },
     },
@@ -154,6 +172,132 @@ export async function taskRoutes(app: FastifyInstance) {
         createdAt: updatedTask.createdAt.toISOString(),
         updatedAt: updatedTask.updatedAt.toISOString(),
       });
+    }
+  );
+
+  /**
+   * PUT /api/tasks/:id — Full Task Edit (Sprint 2 - STORY-005)
+   */
+  typedApp.put(
+    '/tasks/:id',
+    {
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+        body: UpdateTaskInputSchema,
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { id: string };
+      const body = request.body as UpdateTaskInput;
+      const { id } = params;
+
+      const existingTask = await prisma.task.findUnique({ where: { id } });
+      if (!existingTask) {
+        return reply.status(404).send({
+          error: 'Not Found',
+          statusCode: 404,
+          message: `Task with ID ${id} not found`,
+        });
+      }
+
+      const dataToUpdate: any = {};
+      if (body.title !== undefined) dataToUpdate.title = body.title;
+      if (body.description !== undefined) dataToUpdate.description = body.description;
+      if (body.priority !== undefined) dataToUpdate.priority = body.priority;
+      if (body.dueDate !== undefined)
+        dataToUpdate.dueDate = body.dueDate ? new Date(body.dueDate) : null;
+      if (body.tags !== undefined) dataToUpdate.tags = JSON.stringify(body.tags);
+
+      const updatedTask = await prisma.task.update({
+        where: { id },
+        data: dataToUpdate,
+      });
+
+      // Audit Activity Log Entry
+      await prisma.activityLog.create({
+        data: {
+          taskId: updatedTask.id,
+          workspaceId: updatedTask.workspaceId,
+          action: 'TASK_UPDATED',
+          actorId: 'user-system',
+          details: JSON.stringify({ changes: body }),
+        },
+      });
+
+      return reply.status(200).send({
+        ...updatedTask,
+        tags: JSON.parse(updatedTask.tags),
+        dueDate: updatedTask.dueDate ? updatedTask.dueDate.toISOString() : null,
+        createdAt: updatedTask.createdAt.toISOString(),
+        updatedAt: updatedTask.updatedAt.toISOString(),
+      });
+    }
+  );
+
+  /**
+   * DELETE /api/tasks/:id — Delete Task (Sprint 2 - STORY-005)
+   */
+  typedApp.delete(
+    '/tasks/:id',
+    {
+      schema: {
+        params: z.object({ id: z.string().uuid() }),
+      },
+    },
+    async (request, reply) => {
+      const params = request.params as { id: string };
+      const { id } = params;
+
+      const existingTask = await prisma.task.findUnique({ where: { id } });
+      if (!existingTask) {
+        return reply.status(404).send({
+          error: 'Not Found',
+          statusCode: 404,
+          message: `Task with ID ${id} not found`,
+        });
+      }
+
+      await prisma.task.delete({ where: { id } });
+
+      return reply.status(200).send({
+        message: 'Task deleted successfully',
+        id,
+      });
+    }
+  );
+
+  /**
+   * GET /api/activity-logs — Query Activity Logs (Sprint 2 - STORY-006)
+   */
+  typedApp.get(
+    '/activity-logs',
+    {
+      schema: {
+        querystring: ActivityLogQuerySchema,
+      },
+    },
+    async (request, reply) => {
+      const query = request.query as ActivityLogQuery;
+      const { workspaceId, taskId, limit } = query;
+
+      const whereCondition: any = { workspaceId };
+      if (taskId) {
+        whereCondition.taskId = taskId;
+      }
+
+      const logs = await prisma.activityLog.findMany({
+        where: whereCondition,
+        orderBy: { timestamp: 'desc' },
+        take: limit || 50,
+      });
+
+      const formattedLogs = logs.map((log) => ({
+        ...log,
+        timestamp: log.timestamp.toISOString(),
+        details: log.details ? JSON.parse(log.details) : undefined,
+      }));
+
+      return reply.status(200).send(formattedLogs);
     }
   );
 }

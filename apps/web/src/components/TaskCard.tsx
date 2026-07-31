@@ -7,6 +7,7 @@ import { Calendar, Tag, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react
 interface TaskCardProps {
   task: Task;
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
+  onSelectTask?: (task: Task) => void;
 }
 
 const priorityColors: Record<string, string> = {
@@ -16,15 +17,19 @@ const priorityColors: Record<string, string> = {
   URGENT: 'bg-rose-950/60 text-rose-400 border-rose-800',
 };
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateStatus }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateStatus, onSelectTask }) => {
   return (
-    <div className="bg-[#121826] border border-[#1f293d] hover:border-slate-700 rounded-xl p-4 shadow-lg transition-all space-y-3">
+    <div
+      onClick={() => onSelectTask && onSelectTask(task)}
+      className="bg-[#121826] border border-[#1f293d] hover:border-slate-700 rounded-xl p-4 shadow-lg transition-all space-y-3 cursor-pointer group"
+    >
       <div className="flex items-start justify-between gap-2">
-        <h4 className="font-semibold text-slate-100 text-base leading-snug">{task.title}</h4>
+        <h4 className="font-semibold text-slate-100 text-base leading-snug group-hover:text-blue-400 transition-colors">
+          {task.title}
+        </h4>
         <span
-          className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
-            priorityColors[task.priority] || priorityColors.MEDIUM
-          }`}
+          className={`px-2 py-0.5 text-xs font-semibold rounded-full border shrink-0 ${priorityColors[task.priority] || priorityColors.MEDIUM
+            }`}
         >
           {task.priority}
         </span>
@@ -59,7 +64,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateStatus }) => {
       </div>
 
       {/* Status Action Controls */}
-      <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs"
+      >
         {task.status !== 'TODO' && (
           <button
             onClick={() => onUpdateStatus(task.id, task.status === 'DONE' ? 'IN_PROGRESS' : 'TODO')}
