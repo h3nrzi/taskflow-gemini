@@ -48,3 +48,64 @@
 - **Acceptance Criteria Verification**:
   1. **AC-007.1 (Sprint 2 Integration Suite)**: Vitest suite verifying search filtering, update payload validation, delete actions, and audit log retrieval. [PASSED]
   2. **AC-007.2 (Zero Regression)**: 100% test pass rate and 0 typecheck compilation errors across `apps/api` and `apps/web`. [PASSED]
+
+---
+
+## Sprint 3 (Planning / In Progress)
+
+| Story ID | Title | Role | Complexity Points | Status | Assigned Agent |
+| :--- | :--- | :--- | :---: | :--- | :--- |
+| `STORY-008` | Auth & JWT Authentication | Backend | 5 | `TODO` | `backend_developer` |
+| `STORY-009` | RBAC Authorization Middleware | Backend | 3 | `TODO` | `backend_developer` |
+| `STORY-010` | Real-Time WebSocket Gateway & Subscriptions | Fullstack | 5 | `TODO` | `backend_developer` / `frontend_developer` |
+| `STORY-011` | QA Automated Verification (Sprint 3) | QA Reviewer | 3 | `TODO` | `qa_reviewer` |
+
+---
+
+## Sprint 3 User Story Details
+
+### `STORY-008`: Auth & JWT Authentication
+- **Role**: Backend Developer
+- **Complexity Points**: 5
+- **Status**: `TODO`
+- **Assigned Agent**: `backend_developer`
+- **User Story**: As a User, I want to register and log in with secure password hashing and JWT authentication, so that my identity is authenticated across API requests.
+- **Acceptance Criteria**:
+  - AC-008.1: `POST /api/auth/register` accepts `email`, `password`, and `name`. Hashes password with `bcrypt` (salt rounds 10), creates user record, and returns `201 Created` with sanitized user object (no password).
+  - AC-008.2: `POST /api/auth/login` validates credentials via `bcrypt.compare`, issues signed JWT access token (containing `userId` and `email`), and returns `200 OK` with token and user object. Returns `401 Unauthorized` for invalid credentials.
+  - AC-008.3: Protected endpoint `GET /api/auth/me` validates `Authorization: Bearer <token>` header, decodes JWT, and returns active user profile. Returns `401 Unauthorized` for missing, expired, or malformed tokens.
+
+### `STORY-009`: RBAC Authorization Middleware
+- **Role**: Backend Developer
+- **Complexity Points**: 3
+- **Status**: `TODO`
+- **Assigned Agent**: `backend_developer`
+- **User Story**: As a Workspace Admin, I want role-based authorization middleware enforcing workspace permissions, so that users can only perform actions allowed by their role (OWNER, MEMBER, VIEWER).
+- **Acceptance Criteria**:
+  - AC-009.1: Create Fastify authentication plugin/decorator that extracts and verifies JWT header, attaching `request.user` context to incoming HTTP requests.
+  - AC-009.2: Create `authorizeRoles(...roles)` middleware that checks `request.user.role` against allowed permissions for target workspace resources, returning `403 Forbidden` with standard error response if unauthorized.
+  - AC-009.3: Enforce RBAC matrix across task mutation routes: `VIEWER` receives `403 Forbidden` on POST/PUT/DELETE, `MEMBER` can POST/PUT/DELETE tasks, and `OWNER` retains full administrative access.
+
+### `STORY-010`: Real-Time WebSocket Gateway & Event Subscriptions
+- **Role**: Fullstack (`backend_developer` / `frontend_developer`)
+- **Complexity Points**: 5
+- **Status**: `TODO`
+- **Assigned Agent**: `backend_developer` / `frontend_developer`
+- **User Story**: As a Team Member, I want real-time WebSocket room subscriptions and event notifications, so that task updates and activity logs propagate live across clients.
+- **Acceptance Criteria**:
+  - AC-010.1: Implement Fastify WebSocket gateway requiring valid JWT authentication on handshake, terminating unauthenticated socket attempts with `4001 Unauthorized`.
+  - AC-010.2: Implement workspace room subscription protocol (`join-room` / `leave-room`) partitioning client events by `workspaceId`.
+  - AC-010.3: Broadcast real-time events (`TASK_CREATED`, `TASK_UPDATED`, `TASK_DELETED`, `ACTIVITY_LOGGED`) to all connected sockets in target workspace room upon database mutation.
+  - AC-010.4: Update Next.js frontend client to establish WebSocket connection post-login, subscribe to active workspace room, and automatically re-render Kanban board and activity drawer on received events.
+
+### `STORY-011`: QA Verification & Automated Test Suite (Sprint 3)
+- **Role**: QA Reviewer
+- **Complexity Points**: 3
+- **Status**: `TODO`
+- **Assigned Agent**: `qa_reviewer`
+- **User Story**: As a QA Reviewer, I want comprehensive unit, integration, and end-to-end automated tests for Auth, RBAC, and WebSockets, so that system security and real-time synchronization are fully verified without regressions.
+- **Acceptance Criteria**:
+  - AC-011.1: Unit and integration test suite covering Auth endpoints (`/api/auth/register`, `/api/auth/login`, `/api/auth/me`), password hashing verification, and JWT expiration/invalidation edge cases.
+  - AC-011.2: Integration tests validating RBAC permission matrix for `OWNER`, `MEMBER`, and `VIEWER` roles across task CRUD operations (verifying `200 OK` vs `403 Forbidden`).
+  - AC-011.3: Automated WebSocket tests verifying client handshake authentication, room subscription isolation, and end-to-end propagation of `TASK_UPDATED` and `TASK_CREATED` events across concurrent sockets.
+
