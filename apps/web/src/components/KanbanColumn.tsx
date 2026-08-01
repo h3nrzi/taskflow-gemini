@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Task, TaskStatus } from '@shared/schemas/task.schema';
+import { Task, TaskStatus } from '@shared/schemas/index';
 import { TaskCard } from './TaskCard';
 import { Circle, Clock, CheckCircle } from 'lucide-react';
 
@@ -11,6 +11,7 @@ interface KanbanColumnProps {
   tasks: Task[];
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
   onSelectTask?: (task: Task) => void;
+  isReadOnly?: boolean;
 }
 
 const columnHeaderConfig: Record<
@@ -40,6 +41,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   tasks,
   onUpdateStatus,
   onSelectTask,
+  isReadOnly = false,
 }) => {
   const config = columnHeaderConfig[status];
 
@@ -71,6 +73,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
               task={task}
               onUpdateStatus={onUpdateStatus}
               onSelectTask={onSelectTask}
+              isReadOnly={isReadOnly}
             />
           ))
         )}
@@ -78,3 +81,4 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     </div>
   );
 };
+

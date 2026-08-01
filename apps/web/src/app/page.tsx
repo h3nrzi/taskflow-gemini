@@ -1,26 +1,45 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Task,
   TaskStatus,
   TaskPriority,
   CreateTaskInput,
   UpdateTaskInput,
-} from '@shared/schemas/task.schema';
+  UserRole,
+  UserProfile,
+  WsMessage,
+} from '@shared/schemas/index';
 import {
   fetchTasks,
   createTask,
   updateTaskStatus,
   updateTask,
   deleteTask,
+  getAuthToken,
+  setAuthToken,
+  fetchCurrentUser,
 } from '../lib/api';
+import { useWebSocket } from '../lib/useWebSocket';
 import { KanbanColumn } from '../components/KanbanColumn';
 import { CreateTaskModal } from '../components/CreateTaskModal';
 import { TaskDetailModal } from '../components/TaskDetailModal';
 import { ActivityLogDrawer } from '../components/ActivityLogDrawer';
+import { AuthModal } from '../components/AuthModal';
 import { ToastAlert } from '../components/ToastAlert';
-import { Plus, Kanban, RefreshCw, Layers, Search, Filter, History, X } from 'lucide-react';
+import {
+  Plus,
+  Kanban,
+  RefreshCw,
+  Layers,
+  Search,
+  Filter,
+  History,
+  X,
+  Shield,
+  User,
+} from 'lucide-react';
 
 export default function KanbanPage() {
   const [workspaceId, setWorkspaceId] = useState('ws-demo-01');
@@ -32,11 +51,19 @@ export default function KanbanPage() {
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | ''>('');
   const [tagFilter, setTagFilter] = useState('');
 
-  // Modals & Drawers State (STORY-005 & STORY-006)
+  // Modals & Drawers State (STORY-005, STORY-006 & STORY-008)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isActivityDrawerOpen, setIsActivityDrawerOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // Auth & RBAC State (STORY-008 & STORY-009)
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [userRole, setUserRole] = useState<UserRole>('OWNER');
+  const [authToken, setAuthTokenState] = useState<string | null>(null);
+
+  const isReadOnly = userRole === 'VIEWER';
 
   // Toast / Alert Feedback State
   const [toast, setToast] = useState<{ type: 'error' | 'success' | null; message: string | null }>({
@@ -44,7 +71,24 @@ export default function KanbanPage() {
     message: null,
   });
 
-  const loadTasks = async () => {
+  // Initialize Auth user session if token exists
+  useEffect(() => {
+    const token = getAuthToken();
+    setAuthTokenState(token);
+    if (token) {
+      fetchCurrentUser()
+        .then((user) => {
+          setCurrentUser(user);
+          if (user.role) setUserRole(user.role);
+        })
+        .catch(() => {
+          setAuthToken(null);
+          setAuthTokenState(null);
+        });
+    }
+  }, []);
+
+  const loadTasks = useCallback(async () => {
     setLoading(true);
     try {
       const data = await fetchTasks(workspaceId, {
@@ -61,13 +105,54 @@ export default function KanbanPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workspaceId, searchQuery, priorityFilter, tagFilter]);
 
   useEffect(() => {
     loadTasks();
-  }, [workspaceId, searchQuery, priorityFilter, tagFilter]);
+  }, [loadTasks]);
+
+  // Real-Time Live Sync (STORY-010)
+  const handleWsEvent = useCallback(
+    (event: WsMessage) => {
+      if (
+        event.type === 'TASK_CREATED' ||
+        event.type === 'TASK_UPDATED' ||
+        event.type === 'TASK_DELETED'
+      ) {
+        loadTasks();
+        let notice = 'Task updated in real-time';
+        if (event.type === 'TASK_CREATED') notice = 'New task created in real-time';
+        if (event.type === 'TASK_DELETED') notice = 'Task deleted in real-time';
+
+        setToast({
+          type: 'success',
+          message: notice,
+        });
+      } else if (event.type === 'ACTIVITY_LOGGED') {
+        setToast({
+          type: 'success',
+          message: 'Activity log updated in real-time',
+        });
+      }
+    },
+    [loadTasks]
+  );
+
+  const { isConnected } = useWebSocket({
+    workspaceId,
+    token: authToken,
+    onEvent: handleWsEvent,
+  });
 
   const handleCreateTask = async (input: CreateTaskInput) => {
+    if (isReadOnly) {
+      setToast({
+        type: 'error',
+        message: '403 Forbidden: Insufficient role permissions',
+      });
+      return;
+    }
+
     try {
       const newTask = await createTask(input);
       setTasks((prev) => [newTask, ...prev]);
@@ -78,13 +163,23 @@ export default function KanbanPage() {
     } catch (err: any) {
       setToast({
         type: 'error',
-        message: err.message || 'Failed to create task payload (422 / 500 error)',
+        message: err.message?.includes('403')
+          ? '403 Forbidden: Insufficient role permissions'
+          : err.message || 'Failed to create task',
       });
       throw err;
     }
   };
 
   const handleUpdateStatus = async (taskId: string, newStatus: TaskStatus) => {
+    if (isReadOnly) {
+      setToast({
+        type: 'error',
+        message: '403 Forbidden: Insufficient role permissions',
+      });
+      return;
+    }
+
     const previousTasks = [...tasks];
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
@@ -100,12 +195,22 @@ export default function KanbanPage() {
       setTasks(previousTasks);
       setToast({
         type: 'error',
-        message: err.message || 'Failed to update task status',
+        message: err.message?.includes('403')
+          ? '403 Forbidden: Insufficient role permissions'
+          : err.message || 'Failed to update task status',
       });
     }
   };
 
   const handleEditTask = async (taskId: string, input: UpdateTaskInput) => {
+    if (isReadOnly) {
+      setToast({
+        type: 'error',
+        message: '403 Forbidden: Insufficient role permissions',
+      });
+      return;
+    }
+
     try {
       const updated = await updateTask(taskId, input);
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
@@ -117,13 +222,23 @@ export default function KanbanPage() {
     } catch (err: any) {
       setToast({
         type: 'error',
-        message: err.message || 'Failed to update task details',
+        message: err.message?.includes('403')
+          ? '403 Forbidden: Insufficient role permissions'
+          : err.message || 'Failed to update task details',
       });
       throw err;
     }
   };
 
   const handleDeleteTask = async (taskId: string) => {
+    if (isReadOnly) {
+      setToast({
+        type: 'error',
+        message: '403 Forbidden: Insufficient role permissions',
+      });
+      return;
+    }
+
     try {
       await deleteTask(taskId);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
@@ -136,7 +251,9 @@ export default function KanbanPage() {
     } catch (err: any) {
       setToast({
         type: 'error',
-        message: err.message || 'Failed to delete task',
+        message: err.message?.includes('403')
+          ? '403 Forbidden: Insufficient role permissions'
+          : err.message || 'Failed to delete task',
       });
       throw err;
     }
@@ -145,6 +262,27 @@ export default function KanbanPage() {
   const handleSelectTask = (task: Task) => {
     setSelectedTask(task);
     setIsDetailModalOpen(true);
+  };
+
+  const handleAuthSuccess = (user: UserProfile, token: string) => {
+    setCurrentUser(user);
+    setUserRole(user.role);
+    setAuthTokenState(token);
+    setToast({
+      type: 'success',
+      message: `Authenticated as ${user.name} (${user.role})`,
+    });
+  };
+
+  const handleLogout = () => {
+    setAuthToken(null);
+    setAuthTokenState(null);
+    setCurrentUser(null);
+    setUserRole('OWNER');
+    setToast({
+      type: 'success',
+      message: 'Signed out successfully',
+    });
   };
 
   const todoTasks = tasks.filter((t) => t.status === 'TODO');
@@ -167,6 +305,56 @@ export default function KanbanPage() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Live WebSocket Sync Status Badge */}
+            <div
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border ${
+                isConnected
+                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                  : 'bg-slate-900/80 text-slate-400 border-slate-800'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                }`}
+              />
+              <span>{isConnected ? 'WebSocket Connected' : 'WS Disconnected'}</span>
+            </div>
+
+            {/* Role Selector (RBAC Control) */}
+            <div className="flex items-center gap-1.5 bg-[#121826] border border-[#1f293d] px-3 py-1.5 rounded-xl text-xs">
+              <Shield className="w-3.5 h-3.5 text-blue-400" />
+              <span className="text-slate-400 font-semibold">Role:</span>
+              <select
+                value={userRole}
+                onChange={(e) => {
+                  const newRole = e.target.value as UserRole;
+                  setUserRole(newRole);
+                  if (currentUser) {
+                    setCurrentUser({ ...currentUser, role: newRole });
+                  }
+                  setToast({
+                    type: 'success',
+                    message: `Switched role to ${newRole}`,
+                  });
+                }}
+                className="bg-transparent text-slate-100 font-bold outline-none cursor-pointer"
+              >
+                <option value="OWNER">OWNER</option>
+                <option value="MEMBER">MEMBER</option>
+                <option value="VIEWER">VIEWER</option>
+              </select>
+            </div>
+
+            {/* User Account / Auth Modal Trigger */}
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-[#121826] border border-[#1f293d] hover:bg-slate-800 px-3 py-1.5 rounded-xl transition-all text-slate-200"
+            >
+              <User className="w-3.5 h-3.5 text-blue-400" />
+              <span>{currentUser ? currentUser.name : 'Sign In'}</span>
+            </button>
+
             {/* Workspace Switcher */}
             <div className="flex items-center gap-2 bg-[#121826] border border-[#1f293d] px-3 py-1.5 rounded-xl text-xs text-slate-300">
               <Layers className="w-3.5 h-3.5 text-slate-400" />
@@ -181,7 +369,7 @@ export default function KanbanPage() {
               </select>
             </div>
 
-            {/* Audit Log Drawer Button (STORY-006) */}
+            {/* Audit Log Drawer Button */}
             <button
               onClick={() => setIsActivityDrawerOpen(true)}
               className="flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-slate-100 bg-[#121826] border border-[#1f293d] hover:bg-slate-800 px-3 py-1.5 rounded-xl transition-all"
@@ -198,9 +386,25 @@ export default function KanbanPage() {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
 
+            {/* New Task Button - Disabled/Hidden for VIEWER role */}
             <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-all shadow-lg shadow-blue-900/30"
+              onClick={() => {
+                if (isReadOnly) {
+                  setToast({
+                    type: 'error',
+                    message: '403 Forbidden: Insufficient role permissions',
+                  });
+                } else {
+                  setIsCreateModalOpen(true);
+                }
+              }}
+              disabled={isReadOnly}
+              title={isReadOnly ? '403 Forbidden: Insufficient role permissions' : 'Create New Task'}
+              className={`flex items-center gap-2 font-semibold text-sm px-4 py-2 rounded-xl transition-all shadow-lg ${
+                isReadOnly
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700 shadow-none'
+                  : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/30'
+              }`}
             >
               <Plus className="w-4 h-4" />
               New Task
@@ -208,7 +412,7 @@ export default function KanbanPage() {
           </div>
         </div>
 
-        {/* Filter & Search Bar (STORY-004) */}
+        {/* Filter & Search Bar */}
         <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/80">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -280,6 +484,7 @@ export default function KanbanPage() {
               tasks={todoTasks}
               onUpdateStatus={handleUpdateStatus}
               onSelectTask={handleSelectTask}
+              isReadOnly={isReadOnly}
             />
             <KanbanColumn
               status="IN_PROGRESS"
@@ -287,6 +492,7 @@ export default function KanbanPage() {
               tasks={inProgressTasks}
               onUpdateStatus={handleUpdateStatus}
               onSelectTask={handleSelectTask}
+              isReadOnly={isReadOnly}
             />
             <KanbanColumn
               status="DONE"
@@ -294,6 +500,7 @@ export default function KanbanPage() {
               tasks={doneTasks}
               onUpdateStatus={handleUpdateStatus}
               onSelectTask={handleSelectTask}
+              isReadOnly={isReadOnly}
             />
           </div>
         )}
@@ -307,7 +514,7 @@ export default function KanbanPage() {
         onSubmit={handleCreateTask}
       />
 
-      {/* Task Detail & Edit Modal (STORY-005) */}
+      {/* Task Detail & Edit Modal */}
       <TaskDetailModal
         task={selectedTask}
         isOpen={isDetailModalOpen}
@@ -317,13 +524,23 @@ export default function KanbanPage() {
         }}
         onUpdate={handleEditTask}
         onDelete={handleDeleteTask}
+        isReadOnly={isReadOnly}
       />
 
-      {/* Activity Log Audit Trail Drawer (STORY-006) */}
+      {/* Activity Log Audit Trail Drawer */}
       <ActivityLogDrawer
         workspaceId={workspaceId}
         isOpen={isActivityDrawerOpen}
         onClose={() => setIsActivityDrawerOpen(false)}
+      />
+
+      {/* Auth & Identity Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* Toast Alert Feedback */}

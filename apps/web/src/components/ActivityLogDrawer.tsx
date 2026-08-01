@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { TaskActivityLog } from '@shared/schemas/task.schema';
+import { TaskActivityLog } from '@shared/schemas/index';
 import { fetchActivityLogs } from '../lib/api';
 import { History, X, Activity, Clock, ShieldCheck, User } from 'lucide-react';
 

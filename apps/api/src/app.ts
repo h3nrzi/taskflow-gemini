@@ -1,7 +1,11 @@
 import fastify from 'fastify';
 import cors from '@fastify/cors';
+import fastifyWebsocket from '@fastify/websocket';
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod';
 import { ZodError } from 'zod';
+import { authenticateOptional } from './plugins/auth.js';
+import { websocketRoutes } from './plugins/websocket.js';
+import { authRoutes } from './routes/auth.js';
 import { taskRoutes } from './routes/tasks.js';
 
 export function buildApp() {
@@ -14,9 +18,19 @@ export function buildApp() {
     origin: '*',
   });
 
+  app.register(fastifyWebsocket);
+
+  // Global authentication hook (attaches request.user if valid token provided)
+  app.addHook('onRequest', authenticateOptional);
+
   // Custom Error Handler for Fail-Fast Validation (422 Unprocessable Entity)
   app.setErrorHandler((error, request, reply) => {
-    if (error instanceof ZodError || error.statusCode === 400 || error.name === 'ZodError' || (error as any).validation) {
+    if (
+      error instanceof ZodError ||
+      error.statusCode === 400 ||
+      error.name === 'ZodError' ||
+      (error as any).validation
+    ) {
       return reply.status(422).send({
         error: 'Unprocessable Entity',
         statusCode: 422,
@@ -38,7 +52,11 @@ export function buildApp() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  // Task API Routes
+  // WebSocket Gateway Route
+  app.register(websocketRoutes);
+
+  // Auth & Task API Routes
+  app.register(authRoutes, { prefix: '/api' });
   app.register(taskRoutes, { prefix: '/api' });
 
   return app;

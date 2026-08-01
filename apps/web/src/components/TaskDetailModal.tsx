@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Task, TaskPriority, UpdateTaskInput } from '@shared/schemas/task.schema';
-import { Calendar, Tag, Trash2, Edit3, X, Check, Clock } from 'lucide-react';
+import { Task, TaskPriority, UpdateTaskInput } from '@shared/schemas/index';
+import { Calendar, Tag, Trash2, Edit3, X, Check, Clock, Lock } from 'lucide-react';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -10,6 +10,7 @@ interface TaskDetailModalProps {
   onClose: () => void;
   onUpdate: (taskId: string, input: UpdateTaskInput) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
+  isReadOnly?: boolean;
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -18,6 +19,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onClose,
   onUpdate,
   onDelete,
+  isReadOnly = false,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState('');
@@ -45,7 +47,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || isReadOnly) return;
 
     setIsSubmitting(true);
     try {
@@ -69,6 +71,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   };
 
   const handleDelete = async () => {
+    if (isReadOnly) return;
     setIsDeleting(true);
     try {
       await onDelete(task.id);
@@ -101,54 +104,63 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {!isEditing ? (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 bg-blue-950/40 hover:bg-blue-900/50 px-3 py-1.5 rounded-lg border border-blue-800/50 transition-all"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                Edit Task
-              </button>
+            {isReadOnly ? (
+              <span className="flex items-center gap-1 text-xs text-slate-500 bg-slate-900/80 border border-slate-800 px-2.5 py-1 rounded-lg">
+                <Lock className="w-3 h-3 text-slate-400" />
+                Read-Only (Viewer)
+              </span>
             ) : (
-              <button
-                onClick={() => setIsEditing(false)}
-                className="text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5"
-              >
-                Cancel Edit
-              </button>
-            )}
+              <>
+                {!isEditing ? (
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 bg-blue-950/40 hover:bg-blue-900/50 px-3 py-1.5 rounded-lg border border-blue-800/50 transition-all"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Edit Task
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
 
-            {!showConfirmDelete ? (
-              <button
-                onClick={() => setShowConfirmDelete(true)}
-                className="flex items-center gap-1 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 px-3 py-1.5 rounded-lg border border-rose-800/50 transition-all"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete
-              </button>
-            ) : (
-              <div className="flex items-center gap-1.5 bg-rose-950 border border-rose-800 px-2 py-1 rounded-lg">
-                <span className="text-xs text-rose-200 font-medium">Confirm?</span>
-                <button
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                  className="bg-rose-600 hover:bg-rose-500 text-white text-xs px-2 py-0.5 rounded font-bold"
-                >
-                  Yes
-                </button>
-                <button
-                  onClick={() => setShowConfirmDelete(false)}
-                  className="text-slate-400 text-xs px-1 hover:text-slate-200"
-                >
-                  No
-                </button>
-              </div>
+                {!showConfirmDelete ? (
+                  <button
+                    onClick={() => setShowConfirmDelete(true)}
+                    className="flex items-center gap-1 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 px-3 py-1.5 rounded-lg border border-rose-800/50 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5 bg-rose-950 border border-rose-800 px-2 py-1 rounded-lg">
+                    <span className="text-xs text-rose-200 font-medium">Confirm?</span>
+                    <button
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      className="bg-rose-600 hover:bg-rose-500 text-white text-xs px-2 py-0.5 rounded font-bold"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setShowConfirmDelete(false)}
+                      className="text-slate-400 text-xs px-1 hover:text-slate-200"
+                    >
+                      No
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
 
         {/* View / Edit Mode */}
-        {!isEditing ? (
+        {!isEditing || isReadOnly ? (
           <div className="space-y-4">
             <div>
               <h2 className="text-xl font-bold text-slate-100 leading-snug">{task.title}</h2>
@@ -287,3 +299,4 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     </div>
   );
 };
+

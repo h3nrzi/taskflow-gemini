@@ -1,13 +1,14 @@
 'use client';
 
 import React from 'react';
-import { Task, TaskStatus } from '@shared/schemas/task.schema';
-import { Calendar, Tag, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Task, TaskStatus } from '@shared/schemas/index';
+import { Calendar, Tag, ArrowRight, ArrowLeft, CheckCircle2, Lock } from 'lucide-react';
 
 interface TaskCardProps {
   task: Task;
   onUpdateStatus: (taskId: string, newStatus: TaskStatus) => void;
   onSelectTask?: (task: Task) => void;
+  isReadOnly?: boolean;
 }
 
 const priorityColors: Record<string, string> = {
@@ -17,7 +18,12 @@ const priorityColors: Record<string, string> = {
   URGENT: 'bg-rose-950/60 text-rose-400 border-rose-800',
 };
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateStatus, onSelectTask }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({
+  task,
+  onUpdateStatus,
+  onSelectTask,
+  isReadOnly = false,
+}) => {
   return (
     <div
       onClick={() => onSelectTask && onSelectTask(task)}
@@ -28,8 +34,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateStatus, onSele
           {task.title}
         </h4>
         <span
-          className={`px-2 py-0.5 text-xs font-semibold rounded-full border shrink-0 ${priorityColors[task.priority] || priorityColors.MEDIUM
-            }`}
+          className={`px-2 py-0.5 text-xs font-semibold rounded-full border shrink-0 ${
+            priorityColors[task.priority] || priorityColors.MEDIUM
+          }`}
         >
           {task.priority}
         </span>
@@ -68,30 +75,40 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdateStatus, onSele
         onClick={(e) => e.stopPropagation()}
         className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs"
       >
-        {task.status !== 'TODO' && (
-          <button
-            onClick={() => onUpdateStatus(task.id, task.status === 'DONE' ? 'IN_PROGRESS' : 'TODO')}
-            className="flex items-center gap-1 text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
-          >
-            <ArrowLeft className="w-3 h-3" />
-            <span>{task.status === 'DONE' ? 'In Progress' : 'Todo'}</span>
-          </button>
-        )}
-
-        {task.status !== 'DONE' && (
-          <button
-            onClick={() => onUpdateStatus(task.id, task.status === 'TODO' ? 'IN_PROGRESS' : 'DONE')}
-            className="ml-auto flex items-center gap-1 text-blue-400 hover:text-blue-300 font-medium transition-colors px-2.5 py-1 rounded bg-blue-950/30 hover:bg-blue-900/40 border border-blue-800/50"
-          >
-            <span>{task.status === 'TODO' ? 'In Progress' : 'Complete'}</span>
-            {task.status === 'IN_PROGRESS' ? (
-              <CheckCircle2 className="w-3 h-3" />
-            ) : (
-              <ArrowRight className="w-3 h-3" />
+        {isReadOnly ? (
+          <div className="flex items-center gap-1 text-slate-500 text-[11px] font-medium py-1">
+            <Lock className="w-3 h-3" />
+            <span>Read-Only Mode (Viewer)</span>
+          </div>
+        ) : (
+          <>
+            {task.status !== 'TODO' && (
+              <button
+                onClick={() => onUpdateStatus(task.id, task.status === 'DONE' ? 'IN_PROGRESS' : 'TODO')}
+                className="flex items-center gap-1 text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+              >
+                <ArrowLeft className="w-3 h-3" />
+                <span>{task.status === 'DONE' ? 'In Progress' : 'Todo'}</span>
+              </button>
             )}
-          </button>
+
+            {task.status !== 'DONE' && (
+              <button
+                onClick={() => onUpdateStatus(task.id, task.status === 'TODO' ? 'IN_PROGRESS' : 'DONE')}
+                className="ml-auto flex items-center gap-1 text-blue-400 hover:text-blue-300 font-medium transition-colors px-2.5 py-1 rounded bg-blue-950/30 hover:bg-blue-900/40 border border-blue-800/50"
+              >
+                <span>{task.status === 'TODO' ? 'In Progress' : 'Complete'}</span>
+                {task.status === 'IN_PROGRESS' ? (
+                  <CheckCircle2 className="w-3 h-3" />
+                ) : (
+                  <ArrowRight className="w-3 h-3" />
+                )}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 };
+

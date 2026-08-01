@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CreateTaskInput, TaskPriority } from '@shared/schemas/task.schema';
+import { CreateTaskInput, TaskPriority } from '@shared/schemas/index';
 import { Plus, X } from 'lucide-react';
 
 interface CreateTaskModalProps {

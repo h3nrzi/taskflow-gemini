@@ -7,6 +7,20 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("MEMBER")
+  workspaceId  String   @default("default-workspace")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([email])
+  @@index([workspaceId])
+}
+
 model Task {
   id           String        @id @default(uuid())
   workspaceId  String

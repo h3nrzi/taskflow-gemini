@@ -2,6 +2,8 @@ import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { prisma } from '../db.js';
+import { authorizeRoles } from '../plugins/auth.js';
+import { broadcastToWorkspace } from '../plugins/websocket.js';
 import {
   CreateTaskInputSchema,
   UpdateTaskStatusInputSchema,
@@ -19,11 +21,12 @@ export async function taskRoutes(app: FastifyInstance) {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
 
   /**
-   * POST /api/tasks — Create Task (Sprint 1)
+   * POST /api/tasks — Create Task (Sprint 1 & Sprint 3 RBAC + WS)
    */
   typedApp.post(
     '/tasks',
     {
+      preHandler: authorizeRoles('OWNER', 'MEMBER'),
       schema: {
         body: CreateTaskInputSchema,
       },
@@ -44,24 +47,45 @@ export async function taskRoutes(app: FastifyInstance) {
         },
       });
 
-      // Audit Activity Log Creation
-      await prisma.activityLog.create({
-        data: {
-          taskId: createdTask.id,
-          workspaceId: createdTask.workspaceId,
-          action: 'TASK_CREATED',
-          actorId: 'user-system',
-          details: JSON.stringify({ title: createdTask.title, initialStatus: createdTask.status }),
-        },
-      });
-
-      return reply.status(201).send({
+      const formattedTask = {
         ...createdTask,
         tags: JSON.parse(createdTask.tags),
         dueDate: createdTask.dueDate ? createdTask.dueDate.toISOString() : null,
         createdAt: createdTask.createdAt.toISOString(),
         updatedAt: createdTask.updatedAt.toISOString(),
+      };
+
+      // Audit Activity Log Creation
+      const log = await prisma.activityLog.create({
+        data: {
+          taskId: createdTask.id,
+          workspaceId: createdTask.workspaceId,
+          action: 'TASK_CREATED',
+          actorId: request.user?.userId || 'user-system',
+          details: JSON.stringify({ title: createdTask.title, initialStatus: createdTask.status }),
+        },
       });
+
+      const formattedLog = {
+        ...log,
+        timestamp: log.timestamp.toISOString(),
+        details: log.details ? JSON.parse(log.details) : undefined,
+      };
+
+      // Real-time WebSockets Broadcast
+      broadcastToWorkspace(createdTask.workspaceId, {
+        type: 'TASK_CREATED',
+        workspaceId: createdTask.workspaceId,
+        payload: formattedTask,
+      });
+
+      broadcastToWorkspace(createdTask.workspaceId, {
+        type: 'ACTIVITY_LOGGED',
+        workspaceId: createdTask.workspaceId,
+        payload: formattedLog,
+      });
+
+      return reply.status(201).send(formattedTask);
     }
   );
 
@@ -121,11 +145,12 @@ export async function taskRoutes(app: FastifyInstance) {
   );
 
   /**
-   * PATCH /api/tasks/:id/status — Update Task Status (Sprint 1)
+   * PATCH /api/tasks/:id/status — Update Task Status (Sprint 1 & Sprint 3 RBAC + WS)
    */
   typedApp.patch(
     '/tasks/:id/status',
     {
+      preHandler: authorizeRoles('OWNER', 'MEMBER'),
       schema: {
         params: z.object({ id: z.string().uuid() }),
         body: UpdateTaskStatusInputSchema,
@@ -151,13 +176,21 @@ export async function taskRoutes(app: FastifyInstance) {
         data: { status },
       });
 
+      const formattedTask = {
+        ...updatedTask,
+        tags: JSON.parse(updatedTask.tags),
+        dueDate: updatedTask.dueDate ? updatedTask.dueDate.toISOString() : null,
+        createdAt: updatedTask.createdAt.toISOString(),
+        updatedAt: updatedTask.updatedAt.toISOString(),
+      };
+
       // Audit Activity Log Entry
-      await prisma.activityLog.create({
+      const log = await prisma.activityLog.create({
         data: {
           taskId: updatedTask.id,
           workspaceId: updatedTask.workspaceId,
           action: 'STATUS_UPDATED',
-          actorId: 'user-system',
+          actorId: request.user?.userId || 'user-system',
           details: JSON.stringify({
             previousStatus: existingTask.status,
             newStatus: updatedTask.status,
@@ -165,22 +198,36 @@ export async function taskRoutes(app: FastifyInstance) {
         },
       });
 
-      return reply.status(200).send({
-        ...updatedTask,
-        tags: JSON.parse(updatedTask.tags),
-        dueDate: updatedTask.dueDate ? updatedTask.dueDate.toISOString() : null,
-        createdAt: updatedTask.createdAt.toISOString(),
-        updatedAt: updatedTask.updatedAt.toISOString(),
+      const formattedLog = {
+        ...log,
+        timestamp: log.timestamp.toISOString(),
+        details: log.details ? JSON.parse(log.details) : undefined,
+      };
+
+      // Real-time WebSockets Broadcast
+      broadcastToWorkspace(updatedTask.workspaceId, {
+        type: 'TASK_UPDATED',
+        workspaceId: updatedTask.workspaceId,
+        payload: formattedTask,
       });
+
+      broadcastToWorkspace(updatedTask.workspaceId, {
+        type: 'ACTIVITY_LOGGED',
+        workspaceId: updatedTask.workspaceId,
+        payload: formattedLog,
+      });
+
+      return reply.status(200).send(formattedTask);
     }
   );
 
   /**
-   * PUT /api/tasks/:id — Full Task Edit (Sprint 2 - STORY-005)
+   * PUT /api/tasks/:id — Full Task Edit (Sprint 2 - STORY-005 & Sprint 3 RBAC + WS)
    */
   typedApp.put(
     '/tasks/:id',
     {
+      preHandler: authorizeRoles('OWNER', 'MEMBER'),
       schema: {
         params: z.object({ id: z.string().uuid() }),
         body: UpdateTaskInputSchema,
@@ -213,33 +260,55 @@ export async function taskRoutes(app: FastifyInstance) {
         data: dataToUpdate,
       });
 
-      // Audit Activity Log Entry
-      await prisma.activityLog.create({
-        data: {
-          taskId: updatedTask.id,
-          workspaceId: updatedTask.workspaceId,
-          action: 'TASK_UPDATED',
-          actorId: 'user-system',
-          details: JSON.stringify({ changes: body }),
-        },
-      });
-
-      return reply.status(200).send({
+      const formattedTask = {
         ...updatedTask,
         tags: JSON.parse(updatedTask.tags),
         dueDate: updatedTask.dueDate ? updatedTask.dueDate.toISOString() : null,
         createdAt: updatedTask.createdAt.toISOString(),
         updatedAt: updatedTask.updatedAt.toISOString(),
+      };
+
+      // Audit Activity Log Entry
+      const log = await prisma.activityLog.create({
+        data: {
+          taskId: updatedTask.id,
+          workspaceId: updatedTask.workspaceId,
+          action: 'TASK_UPDATED',
+          actorId: request.user?.userId || 'user-system',
+          details: JSON.stringify({ changes: body }),
+        },
       });
+
+      const formattedLog = {
+        ...log,
+        timestamp: log.timestamp.toISOString(),
+        details: log.details ? JSON.parse(log.details) : undefined,
+      };
+
+      // Real-time WebSockets Broadcast
+      broadcastToWorkspace(updatedTask.workspaceId, {
+        type: 'TASK_UPDATED',
+        workspaceId: updatedTask.workspaceId,
+        payload: formattedTask,
+      });
+
+      broadcastToWorkspace(updatedTask.workspaceId, {
+        type: 'ACTIVITY_LOGGED',
+        workspaceId: updatedTask.workspaceId,
+        payload: formattedLog,
+      });
+
+      return reply.status(200).send(formattedTask);
     }
   );
 
   /**
-   * DELETE /api/tasks/:id — Delete Task (Sprint 2 - STORY-005)
+   * DELETE /api/tasks/:id — Delete Task (Sprint 2 - STORY-005 & Sprint 3 RBAC + WS)
    */
   typedApp.delete(
     '/tasks/:id',
     {
+      preHandler: authorizeRoles('OWNER', 'MEMBER'),
       schema: {
         params: z.object({ id: z.string().uuid() }),
       },
@@ -258,6 +327,13 @@ export async function taskRoutes(app: FastifyInstance) {
       }
 
       await prisma.task.delete({ where: { id } });
+
+      // Real-time WebSockets Broadcast
+      broadcastToWorkspace(existingTask.workspaceId, {
+        type: 'TASK_DELETED',
+        workspaceId: existingTask.workspaceId,
+        payload: { id: existingTask.id, workspaceId: existingTask.workspaceId },
+      });
 
       return reply.status(200).send({
         message: 'Task deleted successfully',
